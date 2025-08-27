@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Verbind met DHL Pakketten",
+        "description": "Voer je DHL eCommerce Nederland accountgegevens in.",
+        "data": {
+          "email": "E-mailadres",
+          "password": "Wachtwoord"
+        }
+      },
+      "reauth": {
+        "title": "Opnieuw inloggen bij DHL Pakketten",
+        "description": "Voer je DHL accountgegevens opnieuw in."
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met de DHL-service. Probeer het opnieuw.",
+      "invalid_auth": "Ongeldig e-mailadres of wachtwoord.",
+      "unknown": "Onverwachte fout opgetreden."
+    },
+    "abort": {
+      "already_configured": "Dit account is al geconfigureerd.",
+      "reauth_successful": "Opnieuw inloggen is geslaagd."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "DHL Pakketten Opties",
+        "description": "Configureer hoe vaak er gecontroleerd moet worden op nieuwe pakketten.",
+        "data": {
+          "update_interval": "Update-interval (seconden)"
+        }
+      }
+    }
+  }
+}

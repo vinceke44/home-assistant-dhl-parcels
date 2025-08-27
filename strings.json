@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to DHL Parcels",
+        "description": "Enter your DHL eCommerce Netherlands account details.",
+        "data": {
+          "email": "Email Address",
+          "password": "Password"
+        }
+      },
+      "reauth": {
+        "title": "Reauthenticate DHL Parcels",
+        "description": "Please enter your DHL account credentials again."
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to DHL service. Please try again.",
+      "invalid_auth": "Invalid email or password.",
+      "unknown": "Unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Reauthentication successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "DHL Parcels Options",
+        "description": "Configure how often to check for new parcels.",
+        "data": {
+          "update_interval": "Update interval (seconds)"
+        }
+      }
+    }
+  }
+}
