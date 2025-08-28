@@ -45,17 +45,22 @@ class DHLClient:
     """Thin synchronous client around cloudscraper for DHL eCommerce NL."""
 
     def __init__(self) -> None:
-        self._scraper = cloudscraper.create_scraper()
+        self._scraper = None
         self._logged_in = False
 
     def login(self, email: str, password: str) -> None:
-        """Authenticate and keep session cookies."""
+        """Authenticate and keep session cookies (blocking, run in executor)."""
+        import cloudscraper  # import locally so it only loads when needed
+
+        if self._scraper is None:
+            self._scraper = cloudscraper.create_scraper()
+
         resp = self._scraper.post(
             LOGIN_URL,
             json={"email": email, "password": password},
             timeout=30,
         )
-        if resp.status_code == 401 or resp.status_code == 403:
+        if resp.status_code in (401, 403):
             raise DHLAuthError("Invalid email or password")
         if resp.status_code != 200:
             raise DHLApiError(f"Login failed: HTTP {resp.status_code}")
@@ -63,12 +68,16 @@ class DHLClient:
 
     def fetch_parcels(self) -> dict[str, Any]:
         """Fetch parcels JSON. Assumes session is authenticated."""
+        if self._scraper is None:
+            raise DHLAuthError("Not logged in, scraper not initialized")
+
         resp = self._scraper.get(PARCELS_URL, timeout=30)
         if resp.status_code in (401, 403):
             raise DHLAuthError("Session expired or unauthorized")
         if resp.status_code != 200:
             raise DHLApiError(f"Parcel fetch failed: HTTP {resp.status_code}")
-        return resp.json()  # Expecting dict with "parcels" list
+        return resp.json()
+
 
 
 class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
