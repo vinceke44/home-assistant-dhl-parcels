@@ -28,11 +28,15 @@
     "step": {
       "init": {
         "title": "DHL Parcels Options",
-        "description": "Configure how often to check for new parcels.",
+        "description": "Configure the update interval and which parcel categories to track.",
         "data": {
-          "update_interval": "Update interval (seconds)"
+          "update_interval": "Update interval (seconds)",
+          "categories": "Active categories"
         }
       }
+    },
+    "error": {
+      "categories_empty": "Select at least one category."
     }
   }
 }

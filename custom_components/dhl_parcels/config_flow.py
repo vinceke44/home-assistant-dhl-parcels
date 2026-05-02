@@ -9,12 +9,16 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN,
     CONF_EMAIL,
     CONF_PASSWORD,
+    CONF_CATEGORIES,
     DEFAULT_UPDATE_INTERVAL,
+    CATEGORIES,
+    ALL_CATEGORIES,
 )
 from . import DHLClient, DHLAuthError, DHLApiError
 
@@ -118,7 +122,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.hass.config_entries.async_reload(existing_entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
 
-            # Shouldn't normally happen, but don't silently create a duplicate
             _LOGGER.error("Reauth: could not find existing config entry to update")
             errors["base"] = "unknown"
 
@@ -136,7 +139,7 @@ class InvalidAuth(HomeAssistantError):
 
 
 class DHLParcelsOptionsFlowHandler(config_entries.OptionsFlow):
-    """Options flow for DHL Parcels (interval settings, etc.)."""
+    """Options flow for DHL Parcels (interval settings and category filter)."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
@@ -145,11 +148,21 @@ class DHLParcelsOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         """Manage the options."""
+        errors: dict[str, str] = {}
+
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            if not user_input.get(CONF_CATEGORIES):
+                errors[CONF_CATEGORIES] = "categories_empty"
+            else:
+                return self.async_create_entry(title="", data=user_input)
+
+        current_categories = self.config_entry.options.get(
+            CONF_CATEGORIES, list(CATEGORIES)
+        )
 
         return self.async_show_form(
             step_id="init",
+            errors=errors,
             data_schema=vol.Schema(
                 {
                     vol.Optional(
@@ -158,6 +171,18 @@ class DHLParcelsOptionsFlowHandler(config_entries.OptionsFlow):
                             "update_interval", DEFAULT_UPDATE_INTERVAL
                         ),
                     ): vol.All(int, vol.Range(min=60)),
+                    vol.Required(
+                        CONF_CATEGORIES,
+                        default=current_categories,
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(value=k, label=v)
+                                for k, v in ALL_CATEGORIES.items()
+                            ],
+                            multiple=True,
+                        )
+                    ),
                 }
             ),
         )

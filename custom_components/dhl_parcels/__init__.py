@@ -18,6 +18,7 @@ from .const import (
     DOMAIN,
     CONF_EMAIL,
     CONF_PASSWORD,
+    CONF_CATEGORIES,
     LOGIN_URL,
     PARCELS_URL,
     CATEGORIES,
@@ -54,7 +55,7 @@ class DHLClient:
         import cloudscraper
 
         if self._logged_in:
-            return  # Already have an active session, skip re-login
+            return
 
         if self._scraper is None:
             self._scraper = cloudscraper.create_scraper()
@@ -117,6 +118,7 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         email: str,
         password: str,
         update_interval: int = DEFAULT_UPDATE_INTERVAL,
+        categories: tuple[str, ...] = CATEGORIES,
     ) -> None:
         super().__init__(
             hass,
@@ -127,7 +129,7 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._client = client
         self._email = email
         self._password = password
-        # Keyed by parcelId; None until first successful fetch
+        self._categories = frozenset(categories)
         self._previous_parcels: dict[str, dict[str, Any]] | None = None
 
     async def _async_login_if_needed(self) -> None:
@@ -147,8 +149,8 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _fire_parcel_events(self, all_parcels: list[dict[str, Any]]) -> None:
         """Compare current parcels against previous state and fire change events.
 
-        Skipped on the first run (when _previous_parcels is None) to avoid
-        flooding HA with events for parcels that were already delivered long ago.
+        Skipped on the first run to avoid flooding HA with events for parcels
+        that were already in their current state before HA started.
         """
         if self._previous_parcels is None:
             return
@@ -157,7 +159,6 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             p["parcelId"]: p for p in all_parcels if p.get("parcelId")
         }
 
-        # New parcels — seen now but not before, and not already DELIVERED
         for parcel_id, parcel in current.items():
             if parcel_id not in self._previous_parcels:
                 if parcel.get("category") != "DELIVERED":
@@ -167,7 +168,6 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         _parcel_event_data(parcel),
                     )
 
-        # Existing parcels — check for status/category changes
         for parcel_id, parcel in current.items():
             prev = self._previous_parcels.get(parcel_id)
             if prev is None:
@@ -227,17 +227,14 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         all_parcels: list[dict[str, Any]] = raw.get("parcels", []) or []
 
-        # Fire change events before updating state
         self._fire_parcel_events(all_parcels)
 
-        # Update previous state (full unfiltered list for accurate change detection)
         self._previous_parcels = {
             p["parcelId"]: p for p in all_parcels if p.get("parcelId")
         }
 
-        # Filtered set is what sensors expose
         parcels_filtered = [
-            p for p in all_parcels if p.get("category") in CATEGORIES
+            p for p in all_parcels if p.get("category") in self._categories
         ]
 
         return {
@@ -251,17 +248,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     email: str = entry.data[CONF_EMAIL]
     password: str = entry.data[CONF_PASSWORD]
 
+    options = entry.options or {}
+    selected_categories = tuple(options.get(CONF_CATEGORIES, list(CATEGORIES)))
+
     client = DHLClient()
     coordinator = DHLParcelsCoordinator(
         hass=hass,
         client=client,
         email=email,
         password=password,
-        update_interval=(
-            entry.options.get("update_interval", DEFAULT_UPDATE_INTERVAL)
-            if entry.options
-            else DEFAULT_UPDATE_INTERVAL
-        ),
+        update_interval=options.get("update_interval", DEFAULT_UPDATE_INTERVAL),
+        categories=selected_categories,
     )
 
     try:

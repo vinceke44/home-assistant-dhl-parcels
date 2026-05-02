@@ -28,11 +28,15 @@
     "step": {
       "init": {
         "title": "DHL Pakketten Opties",
-        "description": "Configureer hoe vaak er gecontroleerd moet worden op nieuwe pakketten.",
+        "description": "Configureer update-interval en welke pakketcategorieën worden bijgehouden.",
         "data": {
-          "update_interval": "Update-interval (seconden)"
+          "update_interval": "Update-interval (seconden)",
+          "categories": "Actieve categorieën"
         }
       }
+    },
+    "error": {
+      "categories_empty": "Selecteer minimaal één categorie."
     }
   }
 }
