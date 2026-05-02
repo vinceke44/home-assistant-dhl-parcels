@@ -290,3 +290,37 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry when options or credentials change."""
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate config entry to the current version.
+
+    This is called by HA when entry.version < ConfigFlow.VERSION.
+    Each migration block should be an if/elif chain that upgrades
+    one version at a time, updating entry.version as it goes.
+
+    Example for a future v1 → v2 migration:
+
+        if entry.version == 1:
+            new_data = {**entry.data, "new_field": "default_value"}
+            hass.config_entries.async_update_entry(
+                entry, data=new_data, version=2
+            )
+
+    Always return True on success, False if migration is not possible
+    (which will disable the entry and show an error to the user).
+    """
+    _LOGGER.debug(
+        "Migrating DHL Parcels config entry from version %s to %s",
+        entry.version,
+        ConfigFlow.VERSION,
+    )
+
+    # No migrations needed yet — we are at version 1 and no older
+    # entries exist. Add migration blocks here when VERSION is bumped.
+
+    _LOGGER.info(
+        "DHL Parcels config entry migration to version %s successful",
+        entry.version,
+    )
+    return True
