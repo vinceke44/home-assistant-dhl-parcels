@@ -1,11 +1,14 @@
 """Sensor platform for DHL Parcels (Netherlands)."""
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from datetime import datetime
+
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -26,6 +29,7 @@ async def async_setup_entry(
     async_add_entities([
         DHLParcelCountSensor(coordinator, entry),
         DHLParcelDetailsSensor(coordinator, entry),
+        DHLNextDeliverySensor(coordinator, entry),
     ])
 
 
@@ -75,3 +79,47 @@ class DHLParcelDetailsSensor(CoordinatorEntity, SensorEntity):
             ATTR_COUNT: self.coordinator.data.get(ATTR_COUNT, 0),
             ATTR_PARCELS: self.coordinator.data.get(ATTR_PARCELS, []),
         }
+
+
+class DHLNextDeliverySensor(CoordinatorEntity, SensorEntity):
+    """Sensor showing the earliest expected delivery time among active parcels."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Next Expected Delivery"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_next_delivery"
+        self._attr_device_info = device_info(entry)
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the earliest ETA among active parcels, or None if none."""
+        dates: list[datetime] = []
+        for parcel in self.coordinator.data.get(ATTR_PARCELS, []):
+            moment = (parcel.get("receivingTimeIndication") or {}).get("moment")
+            if moment:
+                parsed = dt_util.parse_datetime(moment)
+                if parsed:
+                    dates.append(parsed)
+        return min(dates) if dates else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose all active parcels sorted by ETA."""
+        upcoming = []
+        for parcel in self.coordinator.data.get(ATTR_PARCELS, []):
+            moment = (parcel.get("receivingTimeIndication") or {}).get("moment")
+            if moment:
+                upcoming.append({
+                    "barcode": parcel.get("barcode"),
+                    "sender": (parcel.get("sender") or {}).get("name"),
+                    "eta": moment,
+                    "category": parcel.get("category"),
+                    "status": parcel.get("status"),
+                })
+        upcoming.sort(key=lambda x: x["eta"])
+        return {"upcoming": upcoming}
