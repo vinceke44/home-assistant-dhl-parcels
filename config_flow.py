@@ -1,11 +1,11 @@
 """Config flow for DHL Parcels integration."""
-
 from __future__ import annotations
 
 import logging
 from typing import Any
 
 import voluptuous as vol
+
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -14,11 +14,11 @@ from .const import (
     DOMAIN,
     CONF_EMAIL,
     CONF_PASSWORD,
+    DEFAULT_UPDATE_INTERVAL,
 )
 from . import DHLClient, DHLAuthError, DHLApiError
 
 _LOGGER = logging.getLogger(__name__)
-
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
@@ -29,12 +29,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-    """Validate the user input allows us to connect to DHL.
-
-    Data contains:
-      - CONF_EMAIL
-      - CONF_PASSWORD
-    """
+    """Validate the user input allows us to connect to DHL."""
     client = DHLClient()
 
     def _try_login() -> None:
@@ -49,7 +44,6 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     except Exception as err:  # noqa: BLE001
         raise CannotConnect from err
 
-    # If no exception, return title
     return {"title": f"DHL Parcels ({data[CONF_EMAIL]})"}
 
 
@@ -57,6 +51,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for DHL Parcels."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> DHLParcelsOptionsFlowHandler:
+        """Get the options flow for DHL Parcels."""
+        return DHLParcelsOptionsFlowHandler(config_entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -67,11 +69,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 info = await validate_input(self.hass, user_input)
-
-                # Check for duplicates
                 await self.async_set_unique_id(user_input[CONF_EMAIL].lower())
                 self._abort_if_unique_id_configured()
-
                 return self.async_create_entry(
                     title=info["title"],
                     data=user_input,
@@ -98,14 +97,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         errors: dict[str, str] = {}
+
         try:
-            info = await validate_input(self.hass, user_input)
+            await validate_input(self.hass, user_input)
         except CannotConnect:
             errors["base"] = "cannot_connect"
         except InvalidAuth:
             errors["base"] = "invalid_auth"
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception("Unexpected exception during reauth: %s", err)
+            errors["base"] = "unknown"
         else:
-            # Update entry with new credentials
             existing_entry = await self.async_set_unique_id(
                 user_input[CONF_EMAIL].lower()
             )
@@ -116,7 +118,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.hass.config_entries.async_reload(existing_entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
 
-            return self.async_create_entry(title=info["title"], data=user_input)
+            # Shouldn't normally happen, but don't silently create a duplicate
+            _LOGGER.error("Reauth: could not find existing config entry to update")
+            errors["base"] = "unknown"
 
         return self.async_show_form(
             step_id="reauth", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
@@ -131,12 +135,6 @@ class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""
 
 
-@callback
-def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> DHLParcelsOptionsFlowHandler:
-    """Get the options flow for DHL Parcels."""
-    return DHLParcelsOptionsFlowHandler(config_entry)
-
-
 class DHLParcelsOptionsFlowHandler(config_entries.OptionsFlow):
     """Options flow for DHL Parcels (interval settings, etc.)."""
 
@@ -147,8 +145,6 @@ class DHLParcelsOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         """Manage the options."""
-        from .const import DEFAULT_UPDATE_INTERVAL
-
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
@@ -161,7 +157,7 @@ class DHLParcelsOptionsFlowHandler(config_entries.OptionsFlow):
                         default=self.config_entry.options.get(
                             "update_interval", DEFAULT_UPDATE_INTERVAL
                         ),
-                    ): int,
+                    ): vol.All(int, vol.Range(min=60)),
                 }
             ),
         )
