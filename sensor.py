@@ -4,7 +4,6 @@ from __future__ import annotations
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -13,6 +12,7 @@ from .const import (
     ATTR_COUNT,
     ATTR_PARCELS,
 )
+from .helpers import device_info
 
 
 async def async_setup_entry(
@@ -21,25 +21,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up DHL Parcels sensors from a config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
+    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
-    entities: list[SensorEntity] = [
+    async_add_entities([
         DHLParcelCountSensor(coordinator, entry),
         DHLParcelDetailsSensor(coordinator, entry),
-    ]
-    async_add_entities(entities)
-
-
-def _device_info(entry: ConfigEntry) -> DeviceInfo:
-    """Shared device info for all DHL sensors."""
-    return DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name="DHL Parcels",
-        manufacturer="DHL",
-        model="eCommerce NL",
-        configuration_url="https://my.dhlecommerce.nl",
-    )
+    ])
 
 
 class DHLParcelCountSensor(CoordinatorEntity, SensorEntity):
@@ -55,7 +42,7 @@ class DHLParcelCountSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_parcel_count"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> int:
@@ -74,7 +61,7 @@ class DHLParcelDetailsSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_parcel_details"
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> int:
