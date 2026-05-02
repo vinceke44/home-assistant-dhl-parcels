@@ -24,6 +24,9 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     ATTR_COUNT,
     ATTR_PARCELS,
+    EVENT_PARCEL_NEW,
+    EVENT_PARCEL_STATUS_CHANGED,
+    EVENT_PARCEL_DELIVERED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,6 +95,18 @@ class DHLClient:
         return resp.json()
 
 
+def _parcel_event_data(parcel: dict[str, Any]) -> dict[str, Any]:
+    """Extract the fields we want to include in every parcel event."""
+    return {
+        "parcel_id": parcel.get("parcelId"),
+        "barcode": parcel.get("barcode"),
+        "sender": (parcel.get("sender") or {}).get("name"),
+        "status": parcel.get("status"),
+        "category": parcel.get("category"),
+        "eta": (parcel.get("receivingTimeIndication") or {}).get("moment"),
+    }
+
+
 class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator to manage DHL data fetching and parsing."""
 
@@ -112,6 +127,8 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._client = client
         self._email = email
         self._password = password
+        # Keyed by parcelId; None until first successful fetch
+        self._previous_parcels: dict[str, dict[str, Any]] | None = None
 
     async def _async_login_if_needed(self) -> None:
         """Ensure we're authenticated; perform login in executor if not already."""
@@ -127,6 +144,63 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return await self.hass.async_add_executor_job(_fetch_blocking)
 
+    def _fire_parcel_events(self, all_parcels: list[dict[str, Any]]) -> None:
+        """Compare current parcels against previous state and fire change events.
+
+        Skipped on the first run (when _previous_parcels is None) to avoid
+        flooding HA with events for parcels that were already delivered long ago.
+        """
+        if self._previous_parcels is None:
+            return
+
+        current: dict[str, dict[str, Any]] = {
+            p["parcelId"]: p for p in all_parcels if p.get("parcelId")
+        }
+
+        # New parcels — seen now but not before, and not already DELIVERED
+        for parcel_id, parcel in current.items():
+            if parcel_id not in self._previous_parcels:
+                if parcel.get("category") != "DELIVERED":
+                    _LOGGER.debug("New parcel detected: %s", parcel.get("barcode"))
+                    self.hass.bus.async_fire(
+                        EVENT_PARCEL_NEW,
+                        _parcel_event_data(parcel),
+                    )
+
+        # Existing parcels — check for status/category changes
+        for parcel_id, parcel in current.items():
+            prev = self._previous_parcels.get(parcel_id)
+            if prev is None:
+                continue
+
+            old_status = prev.get("status")
+            new_status = parcel.get("status")
+            old_category = prev.get("category")
+            new_category = parcel.get("category")
+
+            if old_status == new_status and old_category == new_category:
+                continue
+
+            event_data = {
+                **_parcel_event_data(parcel),
+                "old_status": old_status,
+                "new_status": new_status,
+                "old_category": old_category,
+                "new_category": new_category,
+            }
+
+            if new_category == "DELIVERED" and old_category != "DELIVERED":
+                _LOGGER.debug("Parcel delivered: %s", parcel.get("barcode"))
+                self.hass.bus.async_fire(EVENT_PARCEL_DELIVERED, event_data)
+            else:
+                _LOGGER.debug(
+                    "Parcel status changed: %s (%s → %s)",
+                    parcel.get("barcode"),
+                    old_status,
+                    new_status,
+                )
+                self.hass.bus.async_fire(EVENT_PARCEL_STATUS_CHANGED, event_data)
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch, filter, and shape the data for entities."""
         try:
@@ -139,7 +213,6 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             raw = await self._async_fetch()
         except DHLAuthError:
-            # Session may have expired server-side; invalidate and retry once
             _LOGGER.info("DHL session expired, attempting re-login")
             self._client.invalidate_session()
             try:
@@ -152,8 +225,20 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(f"Fetch error: {err}") from err
 
-        parcels_all = raw.get("parcels", []) or []
-        parcels_filtered = [p for p in parcels_all if p.get("category") in CATEGORIES]
+        all_parcels: list[dict[str, Any]] = raw.get("parcels", []) or []
+
+        # Fire change events before updating state
+        self._fire_parcel_events(all_parcels)
+
+        # Update previous state (full unfiltered list for accurate change detection)
+        self._previous_parcels = {
+            p["parcelId"]: p for p in all_parcels if p.get("parcelId")
+        }
+
+        # Filtered set is what sensors expose
+        parcels_filtered = [
+            p for p in all_parcels if p.get("category") in CATEGORIES
+        ]
 
         return {
             ATTR_COUNT: len(parcels_filtered),

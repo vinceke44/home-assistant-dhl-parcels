@@ -26,3 +26,8 @@ DEFAULT_UPDATE_INTERVAL = 15 * 60  # 15 minutes
 
 ATTR_COUNT = "count"
 ATTR_PARCELS = "parcels"
+
+# Events fired by the integration
+EVENT_PARCEL_NEW = "dhl_parcels_new_parcel"
+EVENT_PARCEL_STATUS_CHANGED = "dhl_parcels_status_changed"
+EVENT_PARCEL_DELIVERED = "dhl_parcels_delivered"
