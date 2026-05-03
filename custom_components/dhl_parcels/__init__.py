@@ -14,6 +14,9 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from homeassistant.helpers import config_validation as cv
+import voluptuous as vol
+
 from .const import (
     DOMAIN,
     CONF_EMAIL,
@@ -275,6 +278,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    async def _handle_refresh(call) -> None:  # noqa: ANN001
+        """Handle the refresh service call."""
+        await coordinator.async_request_refresh()
+
+    hass.services.async_register(DOMAIN, "refresh", _handle_refresh)
+
     return True
 
 
@@ -283,6 +293,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        # Only remove the service when the last entry is unloaded
+        if not hass.data.get(DOMAIN):
+            hass.services.async_remove(DOMAIN, "refresh")
     return unload_ok
 
 

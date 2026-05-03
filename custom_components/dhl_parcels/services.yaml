@@ -1,0 +1,4 @@
+refresh:
+  name: Refresh parcels
+  description: Immediately trigger a parcel data refresh, bypassing the normal update interval.
+  fields: {}
