@@ -88,11 +88,13 @@ class DHLParcelNeedsActionBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @staticmethod
     def _needs_action(parcel: dict) -> bool:
-        """Return True if this parcel requires user action."""
-        return (
-            parcel.get("intervenable") is True
-            or parcel.get("category") in NEEDS_ACTION_CATEGORIES
-        )
+        """Return True if this parcel requires user action.
+
+        Purely category-based: intervenable=True is not used here because
+        DHL sets it on all IN_DELIVERY parcels to indicate redirect is possible,
+        which is not a problem state.
+        """
+        return parcel.get("category") in NEEDS_ACTION_CATEGORIES
 
     @property
     def is_on(self) -> bool:

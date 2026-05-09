@@ -18,6 +18,26 @@ from .const import (
 from .helpers import device_info
 
 
+def _parse_eta(parcel: dict) -> datetime | None:
+    """Extract the earliest meaningful datetime from receivingTimeIndication.
+
+    Handles two formats from the DHL API:
+    - MomentIndication: {"moment": "2026-04-09T11:30:17Z", ...}
+    - IntervalIndication: {"start": "2026-05-09T10:15:00Z", "end": "...", ...}
+    """
+    indication = parcel.get("receivingTimeIndication") or {}
+    indication_type = indication.get("indicationType")
+
+    if indication_type == "MomentIndication":
+        raw = indication.get("moment")
+    elif indication_type == "IntervalIndication":
+        raw = indication.get("start")
+    else:
+        raw = indication.get("moment") or indication.get("start")
+
+    return dt_util.parse_datetime(raw) if raw else None
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -98,13 +118,10 @@ class DHLNextDeliverySensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self) -> datetime | None:
         """Return the earliest ETA among active parcels, or None if none."""
-        dates: list[datetime] = []
-        for parcel in self.coordinator.data.get(ATTR_PARCELS, []):
-            moment = (parcel.get("receivingTimeIndication") or {}).get("moment")
-            if moment:
-                parsed = dt_util.parse_datetime(moment)
-                if parsed:
-                    dates.append(parsed)
+        dates = [
+            eta for p in self.coordinator.data.get(ATTR_PARCELS, [])
+            if (eta := _parse_eta(p)) is not None
+        ]
         return min(dates) if dates else None
 
     @property
@@ -112,14 +129,18 @@ class DHLNextDeliverySensor(CoordinatorEntity, SensorEntity):
         """Expose all active parcels sorted by ETA."""
         upcoming = []
         for parcel in self.coordinator.data.get(ATTR_PARCELS, []):
-            moment = (parcel.get("receivingTimeIndication") or {}).get("moment")
-            if moment:
-                upcoming.append({
-                    "barcode": parcel.get("barcode"),
-                    "sender": (parcel.get("sender") or {}).get("name"),
-                    "eta": moment,
-                    "category": parcel.get("category"),
-                    "status": parcel.get("status"),
-                })
-        upcoming.sort(key=lambda x: x["eta"])
+            eta = _parse_eta(parcel)
+            indication = parcel.get("receivingTimeIndication") or {}
+            upcoming.append({
+                "barcode": parcel.get("barcode"),
+                "sender": (parcel.get("sender") or {}).get("name"),
+                "eta_start": indication.get("start") or indication.get("moment"),
+                "eta_end": indication.get("end"),
+                "category": parcel.get("category"),
+                "status": parcel.get("status"),
+                "_sort": eta.isoformat() if eta else "",
+            })
+        upcoming.sort(key=lambda x: x["_sort"])
+        for item in upcoming:
+            item.pop("_sort")
         return {"upcoming": upcoming}
