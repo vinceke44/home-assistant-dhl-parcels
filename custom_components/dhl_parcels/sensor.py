@@ -124,9 +124,24 @@ class DHLNextDeliverySensor(CoordinatorEntity, SensorEntity):
         ]
         return min(dates) if dates else None
 
+    def _window_end(self) -> datetime | None:
+        """Return the end of the delivery window for the next parcel."""
+        best_start = None
+        best_end = None
+        for parcel in self.coordinator.data.get(ATTR_PARCELS, []):
+            start = _parse_eta(parcel)
+            if start is None:
+                continue
+            if best_start is None or start < best_start:
+                best_start = start
+                indication = parcel.get("receivingTimeIndication") or {}
+                raw_end = indication.get("end")
+                best_end = dt_util.parse_datetime(raw_end) if raw_end else None
+        return best_end
+
     @property
     def extra_state_attributes(self) -> dict:
-        """Expose all active parcels sorted by ETA."""
+        """Expose delivery window end and all active parcels sorted by ETA."""
         upcoming = []
         for parcel in self.coordinator.data.get(ATTR_PARCELS, []):
             eta = _parse_eta(parcel)
@@ -143,4 +158,9 @@ class DHLNextDeliverySensor(CoordinatorEntity, SensorEntity):
         upcoming.sort(key=lambda x: x["_sort"])
         for item in upcoming:
             item.pop("_sort")
-        return {"upcoming": upcoming}
+
+        window_end = self._window_end()
+        return {
+            "window_end": window_end.isoformat() if window_end else None,
+            "upcoming": upcoming,
+        }
