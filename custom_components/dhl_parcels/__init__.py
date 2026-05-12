@@ -31,6 +31,7 @@ from .const import (
     EVENT_PARCEL_NEW,
     EVENT_PARCEL_STATUS_CHANGED,
     EVENT_PARCEL_DELIVERED,
+    EVENT_PARCEL_WINDOW_UPDATED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -181,7 +182,17 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             old_category = prev.get("category")
             new_category = parcel.get("category")
 
-            if old_status == new_status and old_category == new_category:
+            old_window_start = (prev.get("receivingTimeIndication") or {}).get("start") or (prev.get("receivingTimeIndication") or {}).get("moment")
+            new_window_start = (parcel.get("receivingTimeIndication") or {}).get("start") or (parcel.get("receivingTimeIndication") or {}).get("moment")
+            old_window_end = (prev.get("receivingTimeIndication") or {}).get("end")
+            new_window_end = (parcel.get("receivingTimeIndication") or {}).get("end")
+
+            window_changed = (
+                old_window_start != new_window_start
+                or old_window_end != new_window_end
+            )
+
+            if old_status == new_status and old_category == new_category and not window_changed:
                 continue
 
             event_data = {
@@ -195,6 +206,20 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if new_category == "DELIVERED" and old_category != "DELIVERED":
                 _LOGGER.debug("Parcel delivered: %s", parcel.get("barcode"))
                 self.hass.bus.async_fire(EVENT_PARCEL_DELIVERED, event_data)
+            elif window_changed and old_status == new_status and old_category == new_category:
+                _LOGGER.debug(
+                    "Parcel window updated: %s (%s–%s → %s–%s)",
+                    parcel.get("barcode"),
+                    old_window_start, old_window_end,
+                    new_window_start, new_window_end,
+                )
+                self.hass.bus.async_fire(EVENT_PARCEL_WINDOW_UPDATED, {
+                    **event_data,
+                    "old_window_start": old_window_start,
+                    "old_window_end": old_window_end,
+                    "new_window_start": new_window_start,
+                    "new_window_end": new_window_end,
+                })
             else:
                 _LOGGER.debug(
                     "Parcel status changed: %s (%s → %s)",
@@ -202,7 +227,13 @@ class DHLParcelsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     old_status,
                     new_status,
                 )
-                self.hass.bus.async_fire(EVENT_PARCEL_STATUS_CHANGED, event_data)
+                self.hass.bus.async_fire(EVENT_PARCEL_STATUS_CHANGED, {
+                    **event_data,
+                    "old_window_start": old_window_start,
+                    "old_window_end": old_window_end,
+                    "new_window_start": new_window_start,
+                    "new_window_end": new_window_end,
+                })
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch, filter, and shape the data for entities."""
