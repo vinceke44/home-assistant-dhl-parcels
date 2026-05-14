@@ -2,14 +2,18 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
-A Home Assistant custom integration that tracks your DHL eCommerce Netherlands parcels, exposing sensors, a binary sensor, and firing events when parcel status changes.
+A Home Assistant custom integration that tracks your DHL eCommerce Netherlands parcels, exposing sensors, binary sensors, and firing events when parcel status changes.
 
 ## Features
 
 - **Parcel count sensor** — number of active (non-delivered) parcels
 - **Parcel details sensor** — full parcel data as state attributes
-- **Out for delivery binary sensor** — `on` when at least one parcel is in `IN_DELIVERY` state, with per-parcel details as attributes
-- **HA events** on parcel status changes — drive automations without polling template sensors
+- **Next expected delivery sensor** — earliest delivery window start as a `datetime`; `window_end` attribute for the full window
+- **Out for delivery binary sensor** — `on` when any parcel has `IN_DELIVERY` category
+- **Needs action binary sensor** — `on` when a parcel requires intervention (customs, problem, exception)
+- **HA events** on parcel status/window changes — drive automations without polling
+- **Configurable categories** — choose which parcel categories to track via the options flow
+- **`dhl_parcels.refresh` service** — trigger an immediate poll from a dashboard button or automation
 
 ## Installation
 
@@ -30,7 +34,7 @@ A Home Assistant custom integration that tracks your DHL eCommerce Netherlands p
 
 Go to **Settings → Devices & Services → Add Integration** and search for **DHL Parcels**. Enter your DHL eCommerce Netherlands account email and password.
 
-The update interval defaults to 15 minutes and can be changed via the integration's options.
+Use the cogwheel to configure the update interval (default 15 minutes) and which parcel categories to track. Use **Reconfigure** in the three-dot menu to update credentials.
 
 ## Entities
 
@@ -38,24 +42,43 @@ The update interval defaults to 15 minutes and can be changed via the integratio
 |--------|------|-------------|
 | `sensor.dhl_parcels_parcel_count` | Sensor | Number of active parcels |
 | `sensor.dhl_parcels_parcel_details` | Sensor | Active parcel count; full parcel list as attributes |
+| `sensor.dhl_parcels_next_expected_delivery` | Sensor | Earliest delivery window start (`datetime`); `window_end` attribute for window end |
 | `binary_sensor.dhl_parcels_out_for_delivery` | Binary sensor | `on` when any parcel has `IN_DELIVERY` category |
+| `binary_sensor.dhl_parcels_needs_action` | Binary sensor | `on` when any parcel needs action (INTERVENTION, CUSTOMS, PROBLEM, EXCEPTION) |
 
 ## Events
 
-The integration fires events on the HA event bus when parcel state changes. All events include: `parcel_id`, `barcode`, `sender`, `status`, `category`, `eta`.
+All events include: `parcel_id`, `barcode`, `sender`, `status`, `category`, `eta`.
 
 | Event | Fired when |
 |-------|-----------|
-| `dhl_parcels_new_parcel` | A new parcel appears that is not yet delivered |
-| `dhl_parcels_status_changed` | An existing parcel changes status or category |
+| `dhl_parcels_new_parcel` | A new parcel appears |
+| `dhl_parcels_status_changed` | Status or category changes; also includes `old/new_status`, `old/new_category`, `old/new_window_start`, `old/new_window_end` |
+| `dhl_parcels_window_updated` | Delivery window narrows without a status change; includes old and new window fields |
 | `dhl_parcels_delivered` | A parcel transitions to `DELIVERED` |
 
-`dhl_parcels_status_changed` and `dhl_parcels_delivered` also include `old_status`, `new_status`, `old_category`, `new_category`.
-
-### Example automation
+## Example automations
 
 ```yaml
+# Notify when parcel is out for delivery
 automation:
+  - alias: "DHL onderweg melding"
+    trigger:
+      - platform: event
+        event_type: dhl_parcels_status_changed
+    condition:
+      - condition: template
+        value_template: "{{ trigger.event.data.new_category == 'IN_DELIVERY' }}"
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "Pakket onderweg"
+          message: >
+            Pakket van {{ trigger.event.data.sender }} wordt bezorgd tussen
+            {{ as_timestamp(trigger.event.data.new_window_start) | timestamp_custom('%H:%M') }} en
+            {{ as_timestamp(trigger.event.data.new_window_end) | timestamp_custom('%H:%M') }}.
+
+# Notify when delivered
   - alias: "DHL pakket bezorgd"
     trigger:
       - platform: event
