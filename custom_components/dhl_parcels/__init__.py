@@ -53,12 +53,18 @@ class DHLClient:
     def __init__(self) -> None:
         self._scraper = None
         self._logged_in = False
+        self._token_expiry: float = 0.0
+
+    def _is_token_valid(self) -> bool:
+        """Return True if the access token is still valid with a 60s buffer."""
+        import time
+        return self._logged_in and time.monotonic() < self._token_expiry - 60
 
     def login(self, email: str, password: str) -> None:
         """Authenticate and keep session cookies (blocking, run in executor)."""
         import cloudscraper
 
-        if self._logged_in:
+        if self._is_token_valid():
             return
 
         if self._scraper is None:
@@ -79,7 +85,20 @@ class DHLClient:
             _LOGGER.error("DHL login unexpected status %s: %s", resp.status_code, resp.text[:200])
             raise DHLApiError(f"Login failed: HTTP {resp.status_code}")
 
+        import time
         self._logged_in = True
+
+        # Track access_token expiry so we can proactively re-login
+        token_cookie = next(
+            (c for c in self._scraper.cookies if c.name == "access_token"), None
+        )
+        if token_cookie and token_cookie.expires:
+            # Convert absolute Unix expiry to monotonic clock
+            self._token_expiry = time.monotonic() + (token_cookie.expires - time.time())
+        else:
+            # Fallback: assume 15 minutes
+            self._token_expiry = time.monotonic() + 900
+
         _LOGGER.debug("DHL login successful for %s", email)
         _LOGGER.debug(
             "DHL login cookies: %s",
