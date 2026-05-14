@@ -80,6 +80,11 @@ class DHLClient:
             raise DHLApiError(f"Login failed: HTTP {resp.status_code}")
 
         self._logged_in = True
+        _LOGGER.debug("DHL login successful for %s", email)
+        _LOGGER.debug(
+            "DHL login cookies: %s",
+            {c.name: c.expires for c in self._scraper.cookies},
+        )
 
     def invalidate_session(self) -> None:
         """Mark session as expired so next login() call will re-authenticate."""
@@ -111,7 +116,9 @@ class DHLClient:
         if access_token:
             headers["Authorization"] = f"Bearer {access_token}"
 
+        _LOGGER.debug("DHL fetching parcels from %s", PARCELS_URL)
         resp = self._scraper.get(PARCELS_URL, headers=headers, timeout=30)
+        _LOGGER.debug("DHL parcel fetch status: %s", resp.status_code)
 
         if resp.status_code in (401, 403):
             self._logged_in = False
