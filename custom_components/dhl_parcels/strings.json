@@ -12,6 +12,14 @@
       "reauth": {
         "title": "Reauthenticate DHL Parcels",
         "description": "Please enter your DHL account credentials again."
+      },
+      "reconfigure": {
+        "title": "Reconfigure DHL Parcels",
+        "description": "Enter new credentials.",
+        "data": {
+          "email": "Email address",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -21,7 +29,8 @@
     },
     "abort": {
       "already_configured": "This account is already configured.",
-      "reauth_successful": "Reauthentication successful."
+      "reauth_successful": "Reauthentication successful.",
+      "reconfigure_successful": "Reconfiguration successful"
     }
   },
   "options": {

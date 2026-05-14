@@ -130,6 +130,40 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Handle reconfiguration (user-initiated credential update)."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                info = await validate_input(self.hass, user_input)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.exception("Unexpected exception during reconfigure: %s", err)
+                errors["base"] = "unknown"
+            else:
+                self.hass.config_entries.async_update_entry(
+                    self._get_reconfigure_entry(),
+                    data=user_input,
+                    title=info["title"],
+                )
+                await self.hass.config_entries.async_reload(
+                    self._get_reconfigure_entry().entry_id
+                )
+                return self.async_abort(reason="reconfigure_successful")
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=STEP_USER_DATA_SCHEMA,
+            errors=errors,
+        )
+
+
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""
 
