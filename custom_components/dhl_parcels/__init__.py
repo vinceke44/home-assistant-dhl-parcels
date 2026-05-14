@@ -81,8 +81,12 @@ class DHLClient:
 
         self._logged_in = True
         _LOGGER.debug(
+            "DHL login response headers: %s",
+            dict(resp.headers),
+        )
+        _LOGGER.debug(
             "DHL login response cookies: %s",
-            dict(self._scraper.cookies),
+            {c.name: c.value for c in self._scraper.cookies},
         )
         try:
             body = resp.json()
