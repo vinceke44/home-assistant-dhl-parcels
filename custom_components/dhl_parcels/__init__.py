@@ -72,9 +72,11 @@ class DHLClient:
 
         if resp.status_code in (401, 403):
             self._logged_in = False
-            raise DHLAuthError("Invalid email or password")
+            _LOGGER.error("DHL login failed (%s): %s", resp.status_code, resp.text[:200])
+            raise DHLAuthError(f"Login rejected ({resp.status_code})")
 
         if resp.status_code != 200:
+            _LOGGER.error("DHL login unexpected status %s: %s", resp.status_code, resp.text[:200])
             raise DHLApiError(f"Login failed: HTTP {resp.status_code}")
 
         self._logged_in = True
@@ -92,9 +94,11 @@ class DHLClient:
 
         if resp.status_code in (401, 403):
             self._logged_in = False
-            raise DHLAuthError("Session expired or unauthorized")
+            _LOGGER.error("DHL parcel fetch failed (%s): %s", resp.status_code, resp.text[:200])
+            raise DHLAuthError(f"Parcel fetch rejected ({resp.status_code})")
 
         if resp.status_code != 200:
+            _LOGGER.error("DHL parcel fetch unexpected status %s: %s", resp.status_code, resp.text[:200])
             raise DHLApiError(f"Parcel fetch failed: HTTP {resp.status_code}")
 
         return resp.json()
