@@ -1,7 +1,7 @@
 {
   "domain": "dhl_parcels",
   "name": "DHL Parcels (Netherlands)",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "documentation": "https://github.com/vinceke44/home-assistant-dhl-parcels",
   "issue_tracker": "https://github.com/vinceke44/home-assistant-dhl-parcels/issues",
   "requirements": ["cloudscraper==1.2.71"],
