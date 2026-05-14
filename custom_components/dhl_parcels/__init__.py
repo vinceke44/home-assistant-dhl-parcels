@@ -103,7 +103,28 @@ class DHLClient:
         if self._scraper is None:
             raise DHLAuthError("Not logged in, scraper not initialized")
 
-        resp = self._scraper.get(PARCELS_URL, timeout=30)
+        headers = {
+            "Origin": "https://my.dhlecommerce.nl",
+            "Referer": "https://my.dhlecommerce.nl/",
+        }
+
+        # DHL requires XSRF-TOKEN as a header as well as a cookie
+        xsrf = next(
+            (c.value for c in self._scraper.cookies if c.name == "XSRF-TOKEN"),
+            None,
+        )
+        if xsrf:
+            headers["X-XSRF-TOKEN"] = xsrf
+
+        # Also send access_token as Bearer in case the API prefers header auth
+        access_token = next(
+            (c.value for c in self._scraper.cookies if c.name == "access_token"),
+            None,
+        )
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+
+        resp = self._scraper.get(PARCELS_URL, headers=headers, timeout=30)
 
         if resp.status_code in (401, 403):
             self._logged_in = False
