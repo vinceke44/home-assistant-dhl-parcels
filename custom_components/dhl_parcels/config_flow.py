@@ -141,9 +141,6 @@ class InvalidAuth(HomeAssistantError):
 class DHLParcelsOptionsFlowHandler(config_entries.OptionsFlow):
     """Options flow for DHL Parcels (interval settings and category filter)."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
