@@ -62,7 +62,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> DHLParcelsOptionsFlowHandler:
         """Get the options flow for DHL Parcels."""
-        return DHLParcelsOptionsFlowHandler(config_entry)
+        return DHLParcelsOptionsFlowHandler()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
