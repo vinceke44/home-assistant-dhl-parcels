@@ -80,6 +80,15 @@ class DHLClient:
             raise DHLApiError(f"Login failed: HTTP {resp.status_code}")
 
         self._logged_in = True
+        _LOGGER.debug(
+            "DHL login response cookies: %s",
+            dict(self._scraper.cookies),
+        )
+        try:
+            body = resp.json()
+            _LOGGER.debug("DHL login response body keys: %s", list(body.keys()))
+        except Exception:
+            _LOGGER.debug("DHL login response body (non-JSON): %s", resp.text[:200])
 
     def invalidate_session(self) -> None:
         """Mark session as expired so next login() call will re-authenticate."""
